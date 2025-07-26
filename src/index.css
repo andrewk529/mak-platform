@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom MAK Realty Styles */
+.mak-gradient {
+  background: linear-gradient(135deg, #1e40af 0%, #7c3aed 100%);
+}
+
+.mak-text {
+  color: #1e40af;
+}
+
+.mak-bg {
+  background-color: #eff6ff;
+}
