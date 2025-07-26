@@ -1,0 +1,5 @@
+const web3Config = {
+  network: process.env.ETHEREUM_NETWORK,
+  infuraId: process.env.INFURA_PROJECT_ID,
+  privateKey: process.env.ETHEREUM_PRIVATE_KEY
+};
