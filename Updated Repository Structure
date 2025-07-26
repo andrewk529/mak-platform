@@ -1,0 +1,34 @@
+mak-realty-platform/
+├── README.md
+├── LICENSE.md
+├── SECURITY.md
+├── package.json
+├── .gitignore
+├── .env.example
+├── Dockerfile
+├── docker-compose.yml
+├── src/
+│   └── components/
+│       ├── PropertySearch.jsx
+│       ├── MortgageCalculator.jsx
+│       ├── InsuranceIntegration.jsx
+│       └── AgentDashboard.jsx
+├── docs/
+│   ├── MAK_REALTY_BUSINESS_PLAN.md
+│   ├── COMPLIANCE.md
+│   ├── API_INTEGRATION.md
+│   ├── DEPLOYMENT.md
+│   ├── DATABASE_SCHEMA.md
+│   ├── PITCH_DECK.md
+│   ├── PRESS_COVERAGE.md
+│   ├── CASE_STUDIES.md
+│   ├── FINANCIAL_PROJECTIONS.md
+│   ├── LICENSING_COSTS.md
+│   ├── PARTNERSHIP_OPPORTUNITIES.md
+│   ├── WHITE_LABEL_PROPOSAL.md
+│   ├── GDPR_COMPLIANCE.md
+│   └── INVESTOR_FAQ.md
+└── assets/
+    ├── mak-realty-logo/
+    ├── screenshots/
+    └── diagrams/
