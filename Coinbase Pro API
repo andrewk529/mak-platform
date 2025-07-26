@@ -1,0 +1,5 @@
+const coinbaseConfig = {
+  apiKey: process.env.COINBASE_API_KEY,
+  sandbox: false,
+  passphrase: process.env.COINBASE_PASSPHRASE
+};
