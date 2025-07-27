@@ -1,0 +1,86 @@
+# MAK Realty - Blockchain Real Estate Platform
+
+**The Future of Real Estate Transactions**
+
+---
+
+## 🌟 About MAK Realty
+
+MAK Realty is pioneering blockchain-powered real estate technology with AI recommendations and integrated financial services. Founded by **Michael Kelczewski**, a triple-licensed professional (Real Estate Broker + MLO + Insurance) with proven blockchain innovation.
+
+### 🏆 Industry Firsts
+- **First East Coast blockchain property recording** (2024)
+- **Proven Bitcoin real estate transactions** ($1.75M+ deals)
+- **Media recognition** in Delaware Business Times and Fox News
+- **Triple-licensed expertise** in Real Estate, Mortgage, and Insurance
+
+---
+
+## 🚀 Platform Features
+
+### 🔍 AI-Powered Property Search
+- Smart recommendations based on user behavior
+- Real-time MLS integration
+- Advanced filtering and favorites system
+
+### 💰 Blockchain Mortgage Calculator
+- Cryptocurrency payment integration (Bitcoin, Ethereum, USDC)
+- Real-time pre-qualification assessment
+- Transparent blockchain transaction recording
+
+### 🛡️ Insurance Integration Platform
+- Multi-carrier quote comparison
+- Bundle optimization (Auto + Home + Life)
+- Real-time pricing from major insurers
+
+### 📊 Professional Agent Dashboard
+- Unified lead management system
+- AI-powered lead scoring
+- Transaction pipeline tracking
+
+---
+
+## 💡 Innovation Highlights
+
+**Blockchain Transparency**: Every transaction recorded on immutable blockchain ledger for unprecedented trust and transparency.
+
+**AI-Driven Intelligence**: Machine learning algorithms analyze user behavior for personalized property recommendations.
+
+**Integrated Services**: Complete Real Estate + Mortgage + Insurance solution in one platform.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend**: React 18, Tailwind CSS, Lucide Icons
+- **Blockchain**: Ethereum, Smart Contracts, Web3.js
+- **APIs**: MLS Integration, Crypto Exchanges, Insurance Carriers
+- **AI/ML**: Property Recommendation Engine, Lead Scoring
+
+---
+
+## 📱 Demo Components
+
+| Component | Description | Status |
+|-----------|-------------|--------|
+| [Property Search](src/components/PropertySearch.jsx) | AI-powered property discovery | ✅ Ready |
+| [Mortgage Calculator](src/components/MortgageCalculator.jsx) | Blockchain-enabled loan tools | ✅ Ready |
+| [Insurance Platform](src/components/InsuranceIntegration.jsx) | Multi-carrier integration | ✅ Ready |
+| [Agent Dashboard](src/components/AgentDashboard.jsx) | Professional workflow | ✅ Ready |
+
+---
+
+## 📰 Press Coverage
+
+- **[Delaware Business Times](https://delawarebusinesstimes.com/news/local-property-on-block-chain/)** - "Wyoming real estate sale recorded through blockchain"
+- **[Fox News](https://www.foxnews.com/real-estate/seller-puts-lavish-house-on-market-for-1-74-million-but-also-accepts-bitcoin)** - "Seller accepts bitcoin for $1.74 million house"
+
+---
+
+## 🔧 Installation
+
+```bash
+git clone https://github.com/andrewk529/realestate.git
+cd realestate
+npm install
+npm start
