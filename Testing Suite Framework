@@ -1,0 +1,642 @@
+// =============================================
+// MAK REALTY COMPREHENSIVE TESTING FRAMEWORK
+// =============================================
+
+// package.json dependencies to add:
+/*
+{
+  "devDependencies": {
+    "@openzeppelin/test-helpers": "^0.5.16",
+    "@truffle/hdwallet-provider": "^2.1.15",
+    "chai": "^4.3.7",
+    "hardhat": "^2.17.1",
+    "@nomiclabs/hardhat-waffle": "^2.0.6",
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "ethereum-waffle": "^4.0.10",
+    "ethers": "^5.7.2",
+    "mocha": "^10.2.0",
+    "solidity-coverage": "^0.8.4",
+    "hardhat-gas-reporter": "^1.0.9",
+    "@typechain/hardhat": "^6.1.6",
+    "jest": "^29.6.2",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/jest-dom": "^5.16.5",
+    "cypress": "^12.17.4"
+  }
+}
+*/
+
+// =============================================
+// HARDHAT CONFIGURATION
+// File: hardhat.config.js
+// =============================================
+
+require("@nomiclabs/hardhat-waffle");
+require("@nomiclabs/hardhat-ethers");
+require("solidity-coverage");
+require("hardhat-gas-reporter");
+
+module.exports = {
+  solidity: {
+    version: "0.8.19",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200
+      }
+    }
+  },
+  networks: {
+    hardhat: {
+      chainId: 1337,
+      accounts: {
+        count: 20,
+        initialIndex: 0,
+        mnemonic: "test test test test test test test test test test test junk",
+        path: "m/44'/60'/0'/0",
+        accountsBalance: "10000000000000000000000" // 10000 ETH
+      }
+    },
+    sepolia: {
+      url: process.env.SEPOLIA_RPC_URL,
+      accounts: [process.env.PRIVATE_KEY]
+    },
+    mainnet: {
+      url: process.env.MAINNET_RPC_URL,
+      accounts: [process.env.PRIVATE_KEY]
+    }
+  },
+  gasReporter: {
+    enabled: process.env.REPORT_GAS !== undefined,
+    currency: "USD",
+    outputFile: "gas-report.txt",
+    noColors: true
+  },
+  paths: {
+    sources: "./contracts",
+    tests: "./test",
+    cache: "./cache",
+    artifacts: "./artifacts"
+  },
+  mocha: {
+    timeout: 40000
+  }
+};
+
+// =============================================
+// SMART CONTRACT TESTS
+// File: test/PropertyToken.test.js
+// =============================================
+
+const { expect } = require("chai");
+const { ethers } = require("hardhat");
+const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
+
+describe("PropertyToken Contract", function () {
+  // Test fixture for deployment
+  async function deployPropertyTokenFixture() {
+    const [owner, addr1, addr2, addr3] = await ethers.getSigners();
+    
+    const PropertyToken = await ethers.getContractFactory("PropertyToken");
+    const propertyToken = await PropertyToken.deploy();
+    await propertyToken.deployed();
+
+    // Sample property data
+    const sampleProperty = {
+      tokenId: 1,
+      propertyAddress: "123 Main St, City, State",
+      propertyValue: ethers.utils.parseEther("500000"), // $500,000
+      totalShares: 1000,
+      pricePerShare: ethers.utils.parseEther("500") // $500 per share
+    };
+
+    return { propertyToken, owner, addr1, addr2, addr3, sampleProperty };
+  }
+
+  describe("Deployment", function () {
+    it("Should set the right owner", async function () {
+      const { propertyToken, owner } = await loadFixture(deployPropertyTokenFixture);
+      expect(await propertyToken.owner()).to.equal(owner.address);
+    });
+
+    it("Should have correct name and symbol", async function () {
+      const { propertyToken } = await loadFixture(deployPropertyTokenFixture);
+      expect(await propertyToken.name()).to.equal("MAK Realty Property Token");
+      expect(await propertyToken.symbol()).to.equal("MAKP");
+    });
+  });
+
+  describe("Property Tokenization", function () {
+    it("Should create a new property token", async function () {
+      const { propertyToken, owner, sampleProperty } = await loadFixture(deployPropertyTokenFixture);
+      
+      await expect(propertyToken.createProperty(
+        sampleProperty.tokenId,
+        sampleProperty.propertyAddress,
+        sampleProperty.propertyValue,
+        sampleProperty.totalShares,
+        sampleProperty.pricePerShare
+      )).to.emit(propertyToken, "PropertyCreated")
+        .withArgs(sampleProperty.tokenId, sampleProperty.propertyAddress, sampleProperty.propertyValue);
+    });
+
+    it("Should not allow duplicate property IDs", async function () {
+      const { propertyToken, sampleProperty } = await loadFixture(deployPropertyTokenFixture);
+      
+      // Create first property
+      await propertyToken.createProperty(
+        sampleProperty.tokenId,
+        sampleProperty.propertyAddress,
+        sampleProperty.propertyValue,
+        sampleProperty.totalShares,
+        sampleProperty.pricePerShare
+      );
+
+      // Attempt to create duplicate
+      await expect(propertyToken.createProperty(
+        sampleProperty.tokenId,
+        "456 Second Ave",
+        ethers.utils.parseEther("300000"),
+        500,
+        ethers.utils.parseEther("600")
+      )).to.be.revertedWith("Property already exists");
+    });
+  });
+
+  describe("Fractional Ownership", function () {
+    it("Should allow purchasing property shares", async function () {
+      const { propertyToken, addr1, sampleProperty } = await loadFixture(deployPropertyTokenFixture);
+      
+      // Create property
+      await propertyToken.createProperty(
+        sampleProperty.tokenId,
+        sampleProperty.propertyAddress,
+        sampleProperty.propertyValue,
+        sampleProperty.totalShares,
+        sampleProperty.pricePerShare
+      );
+
+      const sharesToBuy = 10;
+      const totalCost = sampleProperty.pricePerShare.mul(sharesToBuy);
+
+      await expect(propertyToken.connect(addr1).purchaseShares(
+        sampleProperty.tokenId,
+        sharesToBuy,
+        { value: totalCost }
+      )).to.emit(propertyToken, "SharesPurchased")
+        .withArgs(addr1.address, sampleProperty.tokenId, sharesToBuy);
+
+      expect(await propertyToken.balanceOf(addr1.address, sampleProperty.tokenId))
+        .to.equal(sharesToBuy);
+    });
+
+    it("Should handle insufficient payment", async function () {
+      const { propertyToken, addr1, sampleProperty } = await loadFixture(deployPropertyTokenFixture);
+      
+      await propertyToken.createProperty(
+        sampleProperty.tokenId,
+        sampleProperty.propertyAddress,
+        sampleProperty.propertyValue,
+        sampleProperty.totalShares,
+        sampleProperty.pricePerShare
+      );
+
+      const sharesToBuy = 10;
+      const insufficientPayment = sampleProperty.pricePerShare.mul(5); // Only pay for 5 shares
+
+      await expect(propertyToken.connect(addr1).purchaseShares(
+        sampleProperty.tokenId,
+        sharesToBuy,
+        { value: insufficientPayment }
+      )).to.be.revertedWith("Insufficient payment");
+    });
+  });
+
+  describe("Revenue Distribution", function () {
+    it("Should distribute rental income proportionally", async function () {
+      const { propertyToken, owner, addr1, addr2, sampleProperty } = await loadFixture(deployPropertyTokenFixture);
+      
+      // Create property and buy shares
+      await propertyToken.createProperty(
+        sampleProperty.tokenId,
+        sampleProperty.propertyAddress,
+        sampleProperty.propertyValue,
+        sampleProperty.totalShares,
+        sampleProperty.pricePerShare
+      );
+
+      // addr1 buys 30% of shares
+      await propertyToken.connect(addr1).purchaseShares(
+        sampleProperty.tokenId,
+        300,
+        { value: sampleProperty.pricePerShare.mul(300) }
+      );
+
+      // addr2 buys 20% of shares  
+      await propertyToken.connect(addr2).purchaseShares(
+        sampleProperty.tokenId,
+        200,
+        { value: sampleProperty.pricePerShare.mul(200) }
+      );
+
+      // Distribute $10,000 in rental income
+      const rentalIncome = ethers.utils.parseEther("10000");
+      await propertyToken.distributeRentalIncome(sampleProperty.tokenId, { value: rentalIncome });
+
+      // Check pending rewards
+      const addr1Rewards = await propertyToken.getPendingRewards(addr1.address, sampleProperty.tokenId);
+      const addr2Rewards = await propertyToken.getPendingRewards(addr2.address, sampleProperty.tokenId);
+
+      expect(addr1Rewards).to.equal(rentalIncome.mul(300).div(1000)); // 30%
+      expect(addr2Rewards).to.equal(rentalIncome.mul(200).div(1000)); // 20%
+    });
+  });
+
+  describe("Security Tests", function () {
+    it("Should prevent unauthorized property creation", async function () {
+      const { propertyToken, addr1, sampleProperty } = await loadFixture(deployPropertyTokenFixture);
+      
+      await expect(propertyToken.connect(addr1).createProperty(
+        sampleProperty.tokenId,
+        sampleProperty.propertyAddress,
+        sampleProperty.propertyValue,
+        sampleProperty.totalShares,
+        sampleProperty.pricePerShare
+      )).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("Should handle emergency pause", async function () {
+      const { propertyToken, addr1, sampleProperty } = await loadFixture(deployPropertyTokenFixture);
+      
+      await propertyToken.createProperty(
+        sampleProperty.tokenId,
+        sampleProperty.propertyAddress,
+        sampleProperty.propertyValue,
+        sampleProperty.totalShares,
+        sampleProperty.pricePerShare
+      );
+
+      // Pause contract
+      await propertyToken.pause();
+
+      await expect(propertyToken.connect(addr1).purchaseShares(
+        sampleProperty.tokenId,
+        10,
+        { value: sampleProperty.pricePerShare.mul(10) }
+      )).to.be.revertedWith("Pausable: paused");
+    });
+  });
+});
+
+// =============================================
+// FRONTEND COMPONENT TESTS
+// File: src/__tests__/PropertySearch.test.js
+// =============================================
+
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import PropertySearch from '../components/PropertySearch/PropertySearch';
+import { Web3Provider } from '../contexts/Web3Context';
+
+// Mock Web3 context
+const mockWeb3Context = {
+  account: '0x123...',
+  contract: {
+    methods: {
+      searchProperties: jest.fn().mockReturnValue({
+        call: jest.fn().mockResolvedValue([
+          {
+            id: 1,
+            address: '123 Main St',
+            price: '500000',
+            shares: 1000
+          }
+        ])
+      })
+    }
+  },
+  web3: {}
+};
+
+describe('PropertySearch Component', () => {
+  const renderWithProvider = (component) => {
+    return render(
+      <Web3Provider value={mockWeb3Context}>
+        {component}
+      </Web3Provider>
+    );
+  };
+
+  it('renders search input and button', () => {
+    renderWithProvider(<PropertySearch />);
+    
+    expect(screen.getByPlaceholderText(/search properties/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /search/i })).toBeInTheDocument();
+  });
+
+  it('performs search on button click', async () => {
+    renderWithProvider(<PropertySearch />);
+    
+    const searchInput = screen.getByPlaceholderText(/search properties/i);
+    const searchButton = screen.getByRole('button', { name: /search/i });
+
+    fireEvent.change(searchInput, { target: { value: 'downtown' } });
+    fireEvent.click(searchButton);
+
+    await waitFor(() => {
+      expect(mockWeb3Context.contract.methods.searchProperties).toHaveBeenCalledWith('downtown');
+    });
+  });
+
+  it('displays search results', async () => {
+    renderWithProvider(<PropertySearch />);
+    
+    const searchButton = screen.getByRole('button', { name: /search/i });
+    fireEvent.click(searchButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('123 Main St')).toBeInTheDocument();
+      expect(screen.getByText('$500,000')).toBeInTheDocument();
+    });
+  });
+
+  it('handles search errors gracefully', async () => {
+    const errorContext = {
+      ...mockWeb3Context,
+      contract: {
+        methods: {
+          searchProperties: jest.fn().mockReturnValue({
+            call: jest.fn().mockRejectedValue(new Error('Network error'))
+          })
+        }
+      }
+    };
+
+    render(
+      <Web3Provider value={errorContext}>
+        <PropertySearch />
+      </Web3Provider>
+    );
+
+    const searchButton = screen.getByRole('button', { name: /search/i });
+    fireEvent.click(searchButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/error searching properties/i)).toBeInTheDocument();
+    });
+  });
+});
+
+// =============================================
+// AI RECOMMENDATION ENGINE TESTS  
+// File: src/__tests__/AIRecommendations.test.js
+// =============================================
+
+import { AIRecommendationEngine } from '../services/ai/AIRecommendationEngine';
+
+describe('AI Recommendation Engine', () => {
+  let engine;
+  
+  beforeEach(() => {
+    engine = new AIRecommendationEngine();
+  });
+
+  const mockUserProfile = {
+    id: 'user123',
+    preferences: {
+      priceRange: { min: 300000, max: 600000 },
+      location: 'downtown',
+      propertyType: 'apartment',
+      bedrooms: 2
+    },
+    searchHistory: [
+      { query: 'downtown apartment', timestamp: Date.now() - 86400000 },
+      { query: '2 bedroom condo', timestamp: Date.now() - 3600000 }
+    ]
+  };
+
+  const mockProperties = [
+    {
+      id: 1,
+      address: '123 Downtown Ave',
+      price: 450000,
+      type: 'apartment',
+      bedrooms: 2,
+      location: 'downtown',
+      features: ['balcony', 'parking']
+    },
+    {
+      id: 2,  
+      address: '456 Suburb St',
+      price: 350000,
+      type: 'house',
+      bedrooms: 3,
+      location: 'suburb',
+      features: ['garden', 'garage']
+    }
+  ];
+
+  it('should generate personalized recommendations', async () => {
+    const recommendations = await engine.getRecommendations(mockUserProfile, mockProperties);
+    
+    expect(recommendations).toHaveLength(2);
+    expect(recommendations[0].score).toBeGreaterThan(recommendations[1].score);
+    expect(recommendations[0].property.address).toBe('123 Downtown Ave');
+  });
+
+  it('should weight price preferences correctly', async () => {
+    const highBudgetProfile = {
+      ...mockUserProfile,
+      preferences: {
+        ...mockUserProfile.preferences,
+        priceRange: { min: 400000, max: 500000 }
+      }
+    };
+
+    const recommendations = await engine.getRecommendations(highBudgetProfile, mockProperties);
+    
+    // Property within budget should score higher
+    const downtownProperty = recommendations.find(r => r.property.id === 1);
+    const suburbProperty = recommendations.find(r => r.property.id === 2);
+    
+    expect(downtownProperty.score).toBeGreaterThan(suburbProperty.score);
+  });
+
+  it('should incorporate search history', async () => {
+    const recommendations = await engine.getRecommendations(mockUserProfile, mockProperties);
+    
+    // Should boost score for properties matching search history
+    const downtownApartment = recommendations.find(r => r.property.type === 'apartment');
+    expect(downtownApartment.reasons).toContain('Matches your recent searches');
+  });
+
+  it('should handle empty property list', async () => {
+    const recommendations = await engine.getRecommendations(mockUserProfile, []);
+    expect(recommendations).toHaveLength(0);
+  });
+});
+
+// =============================================
+// END-TO-END TESTS
+// File: cypress/e2e/property-purchase.cy.js
+// =============================================
+
+describe('Property Purchase Flow', () => {
+  beforeEach(() => {
+    // Connect to local test network
+    cy.visit('/');
+    cy.connectWallet();
+  });
+
+  it('should complete full property purchase', () => {
+    // Search for properties
+    cy.get('[data-testid="search-input"]').type('downtown apartment');
+    cy.get('[data-testid="search-button"]').click();
+
+    // Wait for results
+    cy.get('[data-testid="property-card"]').should('be.visible').first().click();
+
+    // View property details
+    cy.get('[data-testid="property-details"]').should('contain', 'Property Details');
+    cy.get('[data-testid="shares-input"]').type('10');
+    cy.get('[data-testid="purchase-button"]').click();
+
+    // Confirm transaction in MetaMask (mocked)
+    cy.confirmTransaction();
+
+    // Verify success
+    cy.get('[data-testid="success-message"]').should('contain', 'Purchase successful');
+    
+    // Check ownership in dashboard
+    cy.visit('/dashboard');
+    cy.get('[data-testid="owned-properties"]').should('contain', '10 shares');
+  });
+
+  it('should handle insufficient funds', () => {
+    cy.visit('/property/1');
+    cy.get('[data-testid="shares-input"]').type('1000000'); // Unrealistic amount
+    cy.get('[data-testid="purchase-button"]').click();
+
+    cy.get('[data-testid="error-message"]').should('contain', 'Insufficient funds');
+  });
+});
+
+// =============================================
+// TEST UTILITIES
+// File: test/utils/testHelpers.js
+// =============================================
+
+const { ethers } = require("hardhat");
+
+class TestHelpers {
+  static async deployContract(contractName, ...args) {
+    const Contract = await ethers.getContractFactory(contractName);
+    const contract = await Contract.deploy(...args);
+    await contract.deployed();
+    return contract;
+  }
+
+  static async getSigners(count = 5) {
+    const signers = await ethers.getSigners();
+    return signers.slice(0, count);
+  }
+
+  static async mineBlocks(blocks) {
+    for (let i = 0; i < blocks; i++) {
+      await network.provider.send("evm_mine");
+    }
+  }
+
+  static async increaseTime(seconds) {
+    await network.provider.send("evm_increaseTime", [seconds]);
+    await network.provider.send("evm_mine");
+  }
+
+  static parseEther(value) {
+    return ethers.utils.parseEther(value.toString());
+  }
+
+  static formatEther(value) {
+    return ethers.utils.formatEther(value);
+  }
+
+  static async expectRevert(promise, message) {
+    try {
+      await promise;
+      throw new Error("Expected transaction to revert");
+    } catch (error) {
+      expect(error.message).to.include(message);
+    }
+  }
+}
+
+module.exports = TestHelpers;
+
+// =============================================
+// TEST SCRIPTS
+// File: scripts/run-tests.js
+// =============================================
+
+const { spawn } = require('child_process');
+
+async function runAllTests() {
+  console.log('🧪 Starting MAK Realty Test Suite...\n');
+
+  const testSuites = [
+    {
+      name: 'Smart Contract Tests',
+      command: 'npx',
+      args: ['hardhat', 'test'],
+      color: '\x1b[36m' // Cyan
+    },
+    {
+      name: 'Frontend Unit Tests', 
+      command: 'npm',
+      args: ['run', 'test:frontend'],
+      color: '\x1b[35m' // Magenta
+    },
+    {
+      name: 'Integration Tests',
+      command: 'npm', 
+      args: ['run', 'test:integration'],
+      color: '\x1b[33m' // Yellow
+    },
+    {
+      name: 'End-to-End Tests',
+      command: 'npm',
+      args: ['run', 'test:e2e'],
+      color: '\x1b[32m' // Green
+    }
+  ];
+
+  for (const suite of testSuites) {
+    await runTestSuite(suite);
+  }
+
+  console.log('\n✅ All test suites completed!\n');
+}
+
+function runTestSuite({ name, command, args, color }) {
+  return new Promise((resolve, reject) => {
+    console.log(`${color}🏃 Running ${name}...\x1b[0m`);
+    
+    const child = spawn(command, args, { stdio: 'inherit' });
+    
+    child.on('close', (code) => {
+      if (code === 0) {
+        console.log(`${color}✅ ${name} passed!\x1b[0m\n`);
+        resolve();
+      } else {
+        console.log(`${color}❌ ${name} failed with code ${code}\x1b[0m\n`);
+        reject(new Error(`${name} failed`));
+      }
+    });
+  });
+}
+
+if (require.main === module) {
+  runAllTests().catch(console.error);
+}
+
+module.exports = { runAllTests };
