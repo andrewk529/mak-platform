@@ -9,4 +9,4 @@ RESTRICTIONS:
 - No reverse engineering or decompilation
 - No commercial use without licensing agreement
 
-For licensing inquiries, contact MAK Realty: [your-email]
+For licensing inquiries, contact MAK Realty: [andrewk529@protonmail.com]
