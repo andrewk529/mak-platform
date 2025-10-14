@@ -1,0 +1,79 @@
+name: Deploy Contracts (Testnet)
+
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: "Network to deploy to (sepolia | polygon_amoy)"
+        type: choice
+        options: [sepolia, polygon_amoy]
+        default: sepolia
+        required: true
+  push:
+    branches: [main]
+    paths:
+      - "contracts/**"
+      - "scripts/deploy.js"
+      - "hardhat.config.js"
+      - "package.json"
+      - ".github/workflows/deploy.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # Injected from repo secrets (Settings → Secrets and variables → Actions)
+      RPC_URL: ${{ secrets.RPC_URL }}
+      DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+      ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+      POLYGONSCAN_API_KEY: ${{ secrets.POLYGONSCAN_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile contracts
+        run: npx hardhat compile
+
+      - name: Sanity check required secrets
+        run: |
+          test -n "$RPC_URL" || { echo "::error::Missing RPC_URL secret"; exit 1; }
+          test -n "$DEPLOYER_PRIVATE_KEY" || { echo "::error::Missing DEPLOYER_PRIVATE_KEY secret"; exit 1; }
+
+      - name: Deploy
+        run: npx hardhat run scripts/deploy.js --network ${{ inputs.network }}
+
+      # Optional – uncomment and adjust if you verify in deploy.js or know addresses here
+      # - name: Verify on explorer
+      #   if: ${{ (inputs.network == 'sepolia' && env.ETHERSCAN_API_KEY) || (inputs.network == 'polygon_amoy' && env.POLYGONSCAN_API_KEY) }}
+      #   run: |
+      #     echo "Verifying contracts on ${{ inputs.network }}…"
+      #     # Example:
+      #     # npx hardhat verify --network ${{ inputs.network }} 0xYourAddress "arg1" "arg2"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardhat-artifacts-${{ inputs.network }}
+          path: |
+            artifacts
+            cache
+            typechain-types
+            deployments
+          if-no-files-found: ignore
