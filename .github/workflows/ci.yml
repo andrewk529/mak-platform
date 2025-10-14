@@ -80,7 +80,7 @@ jobs:
 
       # Runs Slither via official action (handles solc installs)
       - name: Run Slither
-        uses: crytic/slither-action@v0.3.1
+        uses: crytic/slither-action@v0.4.1
         with:
           target: .
           slither-args: "--filter-paths node_modules --exclude naming-convention,low-level-calls"
