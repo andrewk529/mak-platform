@@ -1,0 +1,11 @@
+name: Bug report
+description: Found a bug
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes: { label: What happened?, placeholder: Steps to reproduce… }
+    validations: { required: true }
+  - type: input
+    id: env
+    attributes: { label: Env (node, network, commit) }
