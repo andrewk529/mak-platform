@@ -1,0 +1,45 @@
+name: Deploy Contracts (Testnet)
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy Smart Contracts to Testnet
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_ENV: production
+      NETWORK: mumbai
+      PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+      POLYGON_RPC_URL: ${{ secrets.POLYGON_RPC_URL }}
+      ETHERSCAN_API_KEY: ${{ secrets.POLYGONSCAN_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile contracts
+        run: npx hardhat compile
+
+      - name: Deploy to Polygon Mumbai
+        run: |
+          npx hardhat run scripts/deploy.js --network $NETWORK
+
+      - name: Verify contracts
+        run: |
+          npx hardhat verify --network $NETWORK $(cat deployments/mumbai.json | jq -r '.PropertyMarketplace.address') || true
+          npx hardhat verify --network $NETWORK $(cat deployments/mumbai.json | jq -r '.PropertyToken.address') || true
