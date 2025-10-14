@@ -1,3 +1,10 @@
+[![CI](https://github.com/andrewk529/mak-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/andrewk529/mak-platform/actions/workflows/ci.yml)
+[![Deploy](https://github.com/andrewk529/mak-platform/actions/workflows/deploy.yml/badge.svg)](https://github.com/andrewk529/mak-platform/actions/workflows/deploy.yml)
+
+
+
+
+
 # MAK Platform 🏡
 
 > **Revolutionizing Real Estate Through Blockchain Technology & AI**
@@ -210,6 +217,11 @@ contracts/
 # Clone the repository
 git clone https://github.com/andrewk529/mak-platform.git
 cd mak-platform
+docs/
+  ├── DEPLOYMENT.md   # step-by-step Hardhat deploy guide
+  ├── API_REFERENCE.md # for contract ABI / endpoints
+  ├── TOKEN_MODEL.md   # governance and revenue logic
+
 
 # Install dependencies
 npm install
@@ -226,6 +238,10 @@ npm test
 
 # Deploy to testnet
 npm run deploy:testnet
+git add docs/DEPLOYMENT.md docs/API_REFERENCE.md docs/TOKEN_MODEL.md
+git commit -m "docs: add deployment, API reference, and token model documentation"
+git push
+
 ```
 
 **📖 [View Full Developer Documentation →](docs/DEVELOPMENT.md)**
@@ -426,3 +442,4 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 [**🚀 Get Started**](https://github.com/andrewk529/mak-platform) • [**📖 Documentation**](docs/README.md) • [**💬 Join Community**](https://discord.gg/makplatform)
 
 </div>
+
