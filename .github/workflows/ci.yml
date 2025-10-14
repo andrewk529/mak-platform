@@ -1,0 +1,86 @@
+name: CI / Lint, Compile, Test, Coverage
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "**.js"
+      - "**.ts"
+      - "**.tsx"
+      - "contracts/**/*.sol"
+      - "hardhat.config.js"
+      - "package.json"
+      - ".prettierrc"
+      - ".solhint.json"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "**.js"
+      - "**.ts"
+      - "**.tsx"
+      - "contracts/**/*.sol"
+      - "hardhat.config.js"
+      - "package.json"
+      - ".prettierrc"
+      - ".solhint.json"
+      - ".github/workflows/ci.yml"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Lint, Compile, Test, Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      # ---- Formatting (fail build if not formatted) ----
+      - name: Check formatting (Prettier)
+        run: npm run fmt:check
+
+      # ---- Solidity lint (non-blocking until you’re ready) ----
+      - name: Lint Solidity (solhint)
+        run: |
+          npx solhint 'contracts/**/*.sol' || true
+
+      # ---- JS/TS lint (non-blocking until config is clean) ----
+      - name: Lint JS/TS (ESLint)
+        run: |
+          if [ -f "eslint.config.js" ] || [ -f ".eslintrc" ] || [ -f ".eslintrc.cjs" ] || [ -f ".eslintrc.js" ]; then
+            npx eslint "src/**/*.{js,ts,tsx}" || true
+          else
+            echo "No ESLint config found; skipping."
+          fi
+
+      # ---- Compile ----
+      - name: Compile (Hardhat)
+        run: npx hardhat compile
+
+      # ---- Unit tests ----
+      - name: Test (Hardhat)
+        run: npx hardhat test --network hardhat
+
+      # ---- Coverage ----
+      - name: Coverage (solidity-coverage)
+        run: npx hardhat coverage --network hardhat
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage
