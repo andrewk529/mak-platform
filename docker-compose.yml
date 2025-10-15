@@ -1,0 +1,123 @@
+# docker-compose.yml
+# Docker Compose configuration for MAK Platform local development
+
+version: '3.8'
+
+services:
+  # Hardhat Node - Local Ethereum blockchain
+  hardhat-node:
+    image: node:18-alpine
+    container_name: mak-hardhat-node
+    working_dir: /app
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    ports:
+      - "8545:8545"
+    command: npx hardhat node
+    networks:
+      - mak-network
+    environment:
+      - NODE_ENV=development
+
+  # Frontend Development Server
+  frontend:
+    image: node:18-alpine
+    container_name: mak-frontend
+    working_dir: /app
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    command: npm start
+    depends_on:
+      - hardhat-node
+    networks:
+      - mak-network
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_NETWORK_ID=31337
+      - REACT_APP_RPC_URL=http://hardhat-node:8545
+
+  # IPFS Node (for metadata storage)
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: mak-ipfs
+    ports:
+      - "4001:4001"     # P2P
+      - "5001:5001"     # API
+      - "8080:8080"     # Gateway
+    volumes:
+      - ipfs_data:/data/ipfs
+      - ipfs_staging:/export
+    networks:
+      - mak-network
+    environment:
+      - IPFS_PROFILE=server
+
+  # PostgreSQL (optional - for indexing/caching)
+  postgres:
+    image: postgres:15-alpine
+    container_name: mak-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mak-network
+    environment:
+      - POSTGRES_DB=mak_platform
+      - POSTGRES_USER=mak_user
+      - POSTGRES_PASSWORD=mak_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mak_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (optional - for caching)
+  redis:
+    image: redis:7-alpine
+    container_name: mak-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - mak-network
+    command: redis-server --appendonly yes
+
+  # The Graph Node (optional - for indexing blockchain data)
+  graph-node:
+    image: graphprotocol/graph-node:latest
+    container_name: mak-graph-node
+    ports:
+      - "8000:8000"   # HTTP
+      - "8001:8001"   # WebSocket
+      - "8020:8020"   # Admin
+      - "8030:8030"   # Indexing status
+    depends_on:
+      - postgres
+      - hardhat-node
+    networks:
+      - mak-network
+    environment:
+      postgres_host: postgres
+      postgres_user: mak_user
+      postgres_pass: mak_password
+      postgres_db: mak_platform
+      ipfs: 'ipfs:5001'
+      ethereum: 'localhost:http://hardhat-node:8545'
+      RUST_LOG: info
+
+networks:
+  mak-network:
+    driver: bridge
+
+volumes:
+  node_modules:
+  ipfs_data:
+  ipfs_staging:
+  postgres_data:
+  redis_data:
