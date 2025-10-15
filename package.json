@@ -1,46 +1,11 @@
 {
-  "name": "mak-realty-platform",
-  "version": "1.0.0",
-  "description": "MAK Realty - Next-generation real estate platform with blockchain integration",
-  "main": "src/index.js",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
-    "lucide-react": "^0.263.1"
-  },
-  "keywords": [
-    "mak-realty",
-    "real-estate",
-    "blockchain",
-    "mortgage",
-    "insurance",
-    "crypto",
-    "ai"
-  ],
-  "author": "Michael Kelczewski - MAK Realty",
-  "license": "PROPRIETARY",
-  "homepage": "https://github.com/[your-username]/mak-realty-platform",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/[your-username]/mak-realty-platform.git"
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "eject": "react-scripts eject",
+    "deploy": "hardhat run scripts/deploy.js",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "init:sepolia": "hardhat run scripts/initialize.js --network sepolia"
   }
 }
