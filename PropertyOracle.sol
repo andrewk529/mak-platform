@@ -6,223 +6,356 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 
 /**
  * @title PropertyOracle
- * @notice Oracle contract for feeding real-world property data on-chain
+ * @dev Bridge between real-world property data and blockchain
+ * @notice Provides verified property valuations and rental income data
  */
 contract PropertyOracle is AccessControl, Pausable {
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
+    bytes32 public constant VERIFIER_ROLE = keccak256("VERIFIER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
-    struct Valuation {
-        uint256 currentValue;
-        uint256 lastUpdated;
-        int256 appreciation;
-        string source;
+    struct PropertyValuation {
+        uint256 appraisedValue;        // Property value in USD (scaled by 1e8)
+        uint256 appraisalDate;         // Timestamp of appraisal
+        address appraiser;             // Address of certified appraiser
+        string dataSource;             // MLS, Zillow, professional appraiser, etc.
+        bool isVerified;               // Verification status
+        uint256 confidenceScore;       // 0-100 confidence in valuation
     }
 
-    struct Occupancy {
-        bool isOccupied;
-        uint256 tenantCount;
-        uint256 leaseEndDate;
-        uint256 monthlyRent;
+    struct RentalData {
+        uint256 monthlyRent;           // Monthly rental income (USD, scaled by 1e8)
+        uint256 lastUpdated;           // Last update timestamp
+        uint256 occupancyRate;         // 0-100 (percentage)
+        bool isVerified;               // Verification status
+        address verifier;              // Who verified this data
     }
 
-    struct MaintenanceRecord {
-        string description;
-        uint256 cost;
-        uint256 date;
-        string category;
+    struct PropertyMetrics {
+        uint256 totalRentalIncome;     // Lifetime rental income
+        uint256 lastRentalPayment;     // Last payment timestamp
+        uint256 averageMonthlyRent;    // Rolling average
+        uint256 valuationChangePct;    // % change from initial valuation
     }
 
-    struct ConditionReport {
-        uint8 overallScore;
-        uint8 structuralScore;
-        uint8 cosmeticScore;
-        address inspector;
-        uint256 inspectionDate;
-        string notes;
-    }
+    // PropertyId => latest valuation
+    mapping(uint256 => PropertyValuation) public propertyValuations;
+    
+    // PropertyId => array of historical valuations
+    mapping(uint256 => PropertyValuation[]) public valuationHistory;
+    
+    // PropertyId => rental data
+    mapping(uint256 => RentalData) public rentalData;
+    
+    // PropertyId => metrics
+    mapping(uint256 => PropertyMetrics) public propertyMetrics;
+    
+    // Approved data sources
+    mapping(string => bool) public approvedDataSources;
+    
+    // Certified appraisers
+    mapping(address => bool) public certifiedAppraisers;
 
-    mapping(uint256 => Valuation[]) public valuationHistory;
-    mapping(uint256 => Occupancy) public currentOccupancy;
-    mapping(uint256 => MaintenanceRecord[]) public maintenanceRecords;
-    mapping(uint256 => ConditionReport[]) public conditionReports;
-    mapping(uint256 => uint256) public totalMaintenanceCosts;
-    uint256 public constant MIN_VALUATION_INTERVAL = 24 hours;
+    // USD/ETH price feed (simplified - in production use Chainlink)
+    uint256 public usdEthPrice; // USD per ETH (scaled by 1e8)
+    
+    // Minimum time between valuations
+    uint256 public constant MIN_VALUATION_INTERVAL = 30 days;
+    
+    // Maximum allowed confidence score
+    uint256 public constant MAX_CONFIDENCE_SCORE = 100;
 
-    event ValuationUpdated(uint256 indexed propertyId, uint256 newValue, int256 appreciation, string source);
-    event OccupancyUpdated(uint256 indexed propertyId, bool isOccupied, uint256 monthlyRent);
-    event MaintenanceRecorded(uint256 indexed propertyId, string description, uint256 cost, string category);
-    event ConditionReportAdded(uint256 indexed propertyId, uint8 overallScore, address indexed inspector);
+    event PropertyValuationUpdated(
+        uint256 indexed propertyId,
+        uint256 appraisedValue,
+        string dataSource,
+        address indexed appraiser
+    );
 
-    error InvalidPropertyId();
-    error InvalidValue();
-    error InvalidScore();
-    error TooSoonForUpdate();
-    error InvalidDate();
-    error EmptyDescription();
+    event RentalDataUpdated(
+        uint256 indexed propertyId,
+        uint256 monthlyRent,
+        uint256 occupancyRate
+    );
+
+    event DataSourceApproved(string dataSource, bool approved);
+    event AppraiserCertified(address indexed appraiser, bool certified);
+    event UsdEthPriceUpdated(uint256 newPrice, uint256 timestamp);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
         _grantRole(ORACLE_ROLE, msg.sender);
+        _grantRole(VERIFIER_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
+        
+        // Initialize with some approved data sources
+        approvedDataSources["MLS"] = true;
+        approvedDataSources["ZILLOW"] = true;
+        approvedDataSources["REDFIN"] = true;
+        approvedDataSources["PROFESSIONAL_APPRAISER"] = true;
+        
+        // Default USD/ETH price (example: $2000 per ETH)
+        usdEthPrice = 2000 * 1e8;
     }
 
-    function updateValuation(uint256 propertyId, uint256 newValue, string memory source) external onlyRole(ORACLE_ROLE) whenNotPaused {
-        if (newValue == 0) revert InvalidValue();
-        Valuation[] storage history = valuationHistory[propertyId];
-        if (history.length > 0) {
-            uint256 lastUpdate = history[history.length - 1].lastUpdated;
-            if (block.timestamp < lastUpdate + MIN_VALUATION_INTERVAL) revert TooSoonForUpdate();
+    /**
+     * @dev Update property valuation
+     * @param _propertyId ID of the property
+     * @param _appraisedValue Property value in USD (scaled by 1e8)
+     * @param _dataSource Source of the valuation data
+     * @param _confidenceScore Confidence score (0-100)
+     */
+    function updatePropertyValuation(
+        uint256 _propertyId,
+        uint256 _appraisedValue,
+        string memory _dataSource,
+        uint256 _confidenceScore
+    ) external onlyRole(ORACLE_ROLE) whenNotPaused {
+        require(_appraisedValue > 0, "Valuation must be greater than zero");
+        require(approvedDataSources[_dataSource], "Data source not approved");
+        require(_confidenceScore <= MAX_CONFIDENCE_SCORE, "Invalid confidence score");
+        
+        PropertyValuation memory currentValuation = propertyValuations[_propertyId];
+        
+        // Enforce minimum interval between valuations (unless first valuation)
+        if (currentValuation.appraisalDate > 0) {
+            require(
+                block.timestamp >= currentValuation.appraisalDate + MIN_VALUATION_INTERVAL,
+                "Valuation interval not met"
+            );
         }
 
-        int256 appreciation = 0;
-        if (history.length > 0) {
-            uint256 oldValue = history[history.length - 1].currentValue;
-            appreciation = int256((newValue * 10000 / oldValue)) - 10000;
-        }
-
-        history.push(Valuation({
-            currentValue: newValue,
-            lastUpdated: block.timestamp,
-            appreciation: appreciation,
-            source: source
-        }));
-
-        emit ValuationUpdated(propertyId, newValue, appreciation, source);
-    }
-
-    function getCurrentValuation(uint256 propertyId) external view returns (Valuation memory) {
-        Valuation[] storage history = valuationHistory[propertyId];
-        if (history.length == 0) revert InvalidPropertyId();
-        return history[history.length - 1];
-    }
-
-    function getValuationHistory(uint256 propertyId) external view returns (Valuation[] memory) {
-        return valuationHistory[propertyId];
-    }
-
-    function updateOccupancy(uint256 propertyId, bool isOccupied, uint256 tenantCount, uint256 leaseEndDate, uint256 monthlyRent) external onlyRole(ORACLE_ROLE) whenNotPaused {
-        if (leaseEndDate > 0 && leaseEndDate < block.timestamp) revert InvalidDate();
-        currentOccupancy[propertyId] = Occupancy({
-            isOccupied: isOccupied,
-            tenantCount: tenantCount,
-            leaseEndDate: leaseEndDate,
-            monthlyRent: monthlyRent
+        PropertyValuation memory newValuation = PropertyValuation({
+            appraisedValue: _appraisedValue,
+            appraisalDate: block.timestamp,
+            appraiser: msg.sender,
+            dataSource: _dataSource,
+            isVerified: certifiedAppraisers[msg.sender],
+            confidenceScore: _confidenceScore
         });
-        emit OccupancyUpdated(propertyId, isOccupied, monthlyRent);
-    }
 
-    function getOccupancy(uint256 propertyId) external view returns (Occupancy memory) {
-        return currentOccupancy[propertyId];
-    }
-
-    function isOccupied(uint256 propertyId) external view returns (bool) {
-        return currentOccupancy[propertyId].isOccupied;
-    }
-
-    function recordMaintenance(uint256 propertyId, string memory description, uint256 cost, string memory category) external onlyRole(ORACLE_ROLE) whenNotPaused {
-        if (bytes(description).length == 0) revert EmptyDescription();
-        maintenanceRecords[propertyId].push(MaintenanceRecord({
-            description: description,
-            cost: cost,
-            date: block.timestamp,
-            category: category
-        }));
-        totalMaintenanceCosts[propertyId] += cost;
-        emit MaintenanceRecorded(propertyId, description, cost, category);
-    }
-
-    function getMaintenanceRecords(uint256 propertyId) external view returns (MaintenanceRecord[] memory) {
-        return maintenanceRecords[propertyId];
-    }
-
-    function getTotalMaintenanceCosts(uint256 propertyId) external view returns (uint256) {
-        return totalMaintenanceCosts[propertyId];
-    }
-
-    function addConditionReport(uint256 propertyId, uint8 overallScore, uint8 structuralScore, uint8 cosmeticScore, string memory notes) external onlyRole(ORACLE_ROLE) whenNotPaused {
-        if (overallScore > 100 || structuralScore > 100 || cosmeticScore > 100) revert InvalidScore();
-        conditionReports[propertyId].push(ConditionReport({
-            overallScore: overallScore,
-            structuralScore: structuralScore,
-            cosmeticScore: cosmeticScore,
-            inspector: msg.sender,
-            inspectionDate: block.timestamp,
-            notes: notes
-        }));
-        emit ConditionReportAdded(propertyId, overallScore, msg.sender);
-    }
-
-    function getLatestConditionReport(uint256 propertyId) external view returns (ConditionReport memory) {
-        ConditionReport[] storage reports = conditionReports[propertyId];
-        if (reports.length == 0) revert InvalidPropertyId();
-        return reports[reports.length - 1];
-    }
-
-    function getConditionReports(uint256 propertyId) external view returns (ConditionReport[] memory) {
-        return conditionReports[propertyId];
-    }
-
-    function getAverageAppreciation(uint256 propertyId) external view returns (int256) {
-        Valuation[] storage history = valuationHistory[propertyId];
-        if (history.length < 2) return 0;
-        int256 totalAppreciation = 0;
-        uint256 count = 0;
-        for (uint256 i = 1; i < history.length; i++) {
-            totalAppreciation += history[i].appreciation;
-            count++;
+        // Update current valuation
+        propertyValuations[_propertyId] = newValuation;
+        
+        // Add to history
+        valuationHistory[_propertyId].push(newValuation);
+        
+        // Update metrics if this isn't the first valuation
+        if (currentValuation.appraisalDate > 0) {
+            PropertyMetrics storage metrics = propertyMetrics[_propertyId];
+            int256 change = int256(_appraisedValue) - int256(currentValuation.appraisedValue);
+            metrics.valuationChangePct = uint256((change * 10000) / int256(currentValuation.appraisedValue));
         }
-        return count > 0 ? totalAppreciation / int256(count) : 0;
+
+        emit PropertyValuationUpdated(_propertyId, _appraisedValue, _dataSource, msg.sender);
     }
 
-    function calculateNOI(uint256 propertyId, uint256 period) external view returns (uint256) {
-        Occupancy memory occupancy = currentOccupancy[propertyId];
-        uint256 grossIncome = occupancy.monthlyRent * period;
-        uint256 maintenanceCosts = totalMaintenanceCosts[propertyId];
-        if (grossIncome > maintenanceCosts) {
-            return grossIncome - maintenanceCosts;
+    /**
+     * @dev Update rental data for a property
+     * @param _propertyId ID of the property
+     * @param _monthlyRent Monthly rent in USD (scaled by 1e8)
+     * @param _occupancyRate Occupancy rate (0-100)
+     */
+    function updateRentalData(
+        uint256 _propertyId,
+        uint256 _monthlyRent,
+        uint256 _occupancyRate
+    ) external onlyRole(ORACLE_ROLE) whenNotPaused {
+        require(_monthlyRent > 0, "Monthly rent must be greater than zero");
+        require(_occupancyRate <= 100, "Invalid occupancy rate");
+
+        RentalData storage rental = rentalData[_propertyId];
+        
+        rental.monthlyRent = _monthlyRent;
+        rental.lastUpdated = block.timestamp;
+        rental.occupancyRate = _occupancyRate;
+        rental.verifier = msg.sender;
+        rental.isVerified = hasRole(VERIFIER_ROLE, msg.sender);
+        
+        // Update metrics
+        PropertyMetrics storage metrics = propertyMetrics[_propertyId];
+        metrics.lastRentalPayment = block.timestamp;
+        
+        // Update rolling average (simplified)
+        if (metrics.averageMonthlyRent == 0) {
+            metrics.averageMonthlyRent = _monthlyRent;
+        } else {
+            // Weighted average: 80% old, 20% new
+            metrics.averageMonthlyRent = (metrics.averageMonthlyRent * 80 + _monthlyRent * 20) / 100;
         }
-        return 0;
+
+        emit RentalDataUpdated(_propertyId, _monthlyRent, _occupancyRate);
     }
 
-    function getPropertyMetrics(uint256 propertyId) external view returns (
-        uint256 currentValue,
-        int256 totalAppreciation,
-        uint256 annualRent,
-        uint256 maintenanceCosts,
-        uint8 conditionScore
-    ) {
-        Valuation[] storage history = valuationHistory[propertyId];
-        if (history.length > 0) {
-            currentValue = history[history.length - 1].currentValue;
-            if (history.length > 1) {
-                uint256 firstValue = history[0].currentValue;
-                totalAppreciation = int256((currentValue * 10000 / firstValue)) - 10000;
-            }
-        }
-        Occupancy memory occupancy = currentOccupancy[propertyId];
-        annualRent = occupancy.monthlyRent * 12;
-        maintenanceCosts = totalMaintenanceCosts[propertyId];
-        ConditionReport[] storage reports = conditionReports[propertyId];
-        if (reports.length > 0) {
-            conditionScore = reports[reports.length - 1].overallScore;
-        }
+    /**
+     * @dev Verify rental income payment
+     * @param _propertyId ID of the property
+     * @param _amount Amount received
+     */
+    function verifyRentalIncome(uint256 _propertyId, uint256 _amount)
+        external
+        onlyRole(VERIFIER_ROLE)
+        whenNotPaused
+        returns (bool)
+    {
+        require(_amount > 0, "Amount must be greater than zero");
+        
+        PropertyMetrics storage metrics = propertyMetrics[_propertyId];
+        metrics.totalRentalIncome += _amount;
+        metrics.lastRentalPayment = block.timestamp;
+        
+        return true;
     }
 
+    /**
+     * @dev Get property valuation in ETH
+     * @param _propertyId ID of the property
+     * @return Value in ETH (wei)
+     */
+    function getPropertyValueInEth(uint256 _propertyId)
+        external
+        view
+        returns (uint256)
+    {
+        PropertyValuation memory valuation = propertyValuations[_propertyId];
+        require(valuation.appraisedValue > 0, "No valuation available");
+        
+        // Convert USD to ETH
+        // valuationUSD (1e8) / usdEthPrice (1e8) = ETH (1e18 adjustment)
+        return (valuation.appraisedValue * 1e18) / usdEthPrice;
+    }
+
+    /**
+     * @dev Get monthly rent in ETH
+     * @param _propertyId ID of the property
+     * @return Rent in ETH (wei)
+     */
+    function getMonthlyRentInEth(uint256 _propertyId)
+        external
+        view
+        returns (uint256)
+    {
+        RentalData memory rental = rentalData[_propertyId];
+        require(rental.monthlyRent > 0, "No rental data available");
+        
+        // Adjust for occupancy rate
+        uint256 effectiveRent = (rental.monthlyRent * rental.occupancyRate) / 100;
+        
+        // Convert USD to ETH
+        return (effectiveRent * 1e18) / usdEthPrice;
+    }
+
+    /**
+     * @dev Get valuation history for a property
+     * @param _propertyId ID of the property
+     */
+    function getValuationHistory(uint256 _propertyId)
+        external
+        view
+        returns (PropertyValuation[] memory)
+    {
+        return valuationHistory[_propertyId];
+    }
+
+    /**
+     * @dev Calculate cap rate (rental yield)
+     * @param _propertyId ID of the property
+     * @return Cap rate (scaled by 100, e.g., 550 = 5.5%)
+     */
+    function getCapRate(uint256 _propertyId)
+        external
+        view
+        returns (uint256)
+    {
+        PropertyValuation memory valuation = propertyValuations[_propertyId];
+        RentalData memory rental = rentalData[_propertyId];
+        
+        require(valuation.appraisedValue > 0, "No valuation available");
+        require(rental.monthlyRent > 0, "No rental data available");
+        
+        // Annual rent / property value * 10000 (for percentage with 2 decimals)
+        uint256 annualRent = rental.monthlyRent * 12;
+        return (annualRent * 10000) / valuation.appraisedValue;
+    }
+
+    /**
+     * @dev Update USD/ETH price (admin only)
+     * @param _newPrice New price (USD per ETH, scaled by 1e8)
+     */
+    function updateUsdEthPrice(uint256 _newPrice)
+        external
+        onlyRole(ADMIN_ROLE)
+    {
+        require(_newPrice > 0, "Price must be greater than zero");
+        
+        usdEthPrice = _newPrice;
+        
+        emit UsdEthPriceUpdated(_newPrice, block.timestamp);
+    }
+
+    /**
+     * @dev Approve/revoke data source
+     * @param _dataSource Name of the data source
+     * @param _approved Approval status
+     */
+    function setDataSourceApproval(string memory _dataSource, bool _approved)
+        external
+        onlyRole(ADMIN_ROLE)
+    {
+        approvedDataSources[_dataSource] = _approved;
+        
+        emit DataSourceApproved(_dataSource, _approved);
+    }
+
+    /**
+     * @dev Certify/revoke appraiser
+     * @param _appraiser Address of the appraiser
+     * @param _certified Certification status
+     */
+    function setAppraiserCertification(address _appraiser, bool _certified)
+        external
+        onlyRole(ADMIN_ROLE)
+    {
+        require(_appraiser != address(0), "Invalid appraiser address");
+        
+        certifiedAppraisers[_appraiser] = _certified;
+        
+        emit AppraiserCertified(_appraiser, _certified);
+    }
+
+    /**
+     * @dev Get comprehensive property data
+     * @param _propertyId ID of the property
+     */
+    function getPropertyData(uint256 _propertyId)
+        external
+        view
+        returns (
+            PropertyValuation memory valuation,
+            RentalData memory rental,
+            PropertyMetrics memory metrics
+        )
+    {
+        return (
+            propertyValuations[_propertyId],
+            rentalData[_propertyId],
+            propertyMetrics[_propertyId]
+        );
+    }
+
+    /**
+     * @dev Pause the contract
+     */
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
 
+    /**
+     * @dev Unpause the contract
+     */
     function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
-    }
-
-    function batchUpdateValuations(uint256[] memory propertyIds, uint256[] memory newValues, string[] memory sources) external onlyRole(ORACLE_ROLE) whenNotPaused {
-        require(propertyIds.length == newValues.length && newValues.length == sources.length, "Array length mismatch");
-        for (uint256 i = 0; i < propertyIds.length; i++) {
-            if (newValues[i] > 0) {
-                this.updateValuation(propertyIds[i], newValues[i], sources[i]);
-            }
-        }
     }
 }
