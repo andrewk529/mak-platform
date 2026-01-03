@@ -1,0 +1,203 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Run Tests & Coverage
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for codecov
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Compile contracts
+        run: npx hardhat compile
+      
+      - name: Run unit tests
+        run: npm run test
+        env:
+          REPORT_GAS: true
+      
+      - name: Generate coverage report
+        run: npm run coverage
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/coverage-final.json
+          flags: smart-contracts
+          name: smart-contract-coverage
+          fail_ci_if_error: true
+          verbose: true
+      
+      - name: Archive coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ matrix.node-version }}
+          path: |
+            coverage/
+            coverage.json
+          retention-days: 30
+      
+      - name: Archive test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.node-version }}
+          path: test-results/
+          retention-days: 30
+      
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: romeovs/lcov-reporter-action@v0.3.1
+        with:
+          lcov-file: ./coverage/lcov.info
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  security-analysis:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run Slither
+        uses: crytic/slither-action@v0.3.0
+        continue-on-error: true
+        with:
+          node-version: '20.x'
+      
+      - name: Run Mythril (if contracts exist)
+        continue-on-error: true
+        run: |
+          if [ -d "contracts" ] && [ "$(ls -A contracts/*.sol 2>/dev/null)" ]; then
+            docker run -v $(pwd):/tmp mythril/myth analyze /tmp/contracts/*.sol
+          else
+            echo "No Solidity contracts found, skipping Mythril"
+          fi
+
+  lint:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run Solhint (Solidity linter)
+        continue-on-error: true
+        run: npx solhint 'contracts/**/*.sol'
+      
+      - name: Run ESLint (JavaScript linter)
+        continue-on-error: true
+        run: npx eslint .
+
+  gas-report:
+    name: Gas Usage Report
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run tests with gas reporting
+        run: REPORT_GAS=true npm run test
+      
+      - name: Comment gas report on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('gas-report.txt')) {
+              const report = fs.readFileSync('gas-report.txt', 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `## ⛽ Gas Usage Report\n\n\`\`\`\n${report}\n\`\`\``
+              });
+            }
+
+  build:
+    name: Build & Compile Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Compile contracts
+        run: npx hardhat compile
+      
+      - name: Check contract sizes
+        run: npx hardhat size-contracts
+        continue-on-error: true
+      
+      - name: Archive compiled artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-contracts
+          path: |
+            artifacts/
+            cache/
+          retention-days: 7
