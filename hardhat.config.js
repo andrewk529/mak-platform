@@ -1,4 +1,9 @@
 require("@nomicfoundation/hardhat-toolbox");
+require("@nomicfoundation/hardhat-verify");
+require("@openzeppelin/hardhat-upgrades");
+require("hardhat-gas-reporter");
+require("hardhat-contract-sizer");
+require("solidity-coverage");
 require("dotenv").config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
@@ -10,54 +15,80 @@ module.exports = {
         enabled: true,
         runs: 200,
       },
+      viaIR: true, // Enable IR-based code generator for better optimization
     },
   },
   
   networks: {
-    // Local development network
     hardhat: {
       chainId: 31337,
+      forking: {
+        enabled: false,
+        // url: process.env.MAINNET_RPC_URL || "",
+      },
+      mining: {
+        auto: true,
+        interval: 0,
+      },
     },
-    
-    // Local node
     localhost: {
       url: "http://127.0.0.1:8545",
       chainId: 31337,
     },
-    
-    // Sepolia testnet
     sepolia: {
-      url: process.env.SEPOLIA_RPC_URL || "https://sepolia.infura.io/v3/YOUR_KEY",
+      url: process.env.SEPOLIA_RPC_URL || "",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 11155111,
+      gasPrice: "auto",
     },
-    
-    // Ethereum mainnet
     mainnet: {
-      url: process.env.MAINNET_RPC_URL || "https://mainnet.infura.io/v3/YOUR_KEY",
+      url: process.env.MAINNET_RPC_URL || "",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 1,
+      gasPrice: "auto",
+    },
+    polygon: {
+      url: process.env.POLYGON_RPC_URL || "https://polygon-rpc.com",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      chainId: 137,
+    },
+    arbitrum: {
+      url: process.env.ARBITRUM_RPC_URL || "https://arb1.arbitrum.io/rpc",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      chainId: 42161,
     },
   },
   
-  // Etherscan verification
   etherscan: {
     apiKey: {
       mainnet: process.env.ETHERSCAN_API_KEY || "",
       sepolia: process.env.ETHERSCAN_API_KEY || "",
+      polygon: process.env.POLYGONSCAN_API_KEY || "",
+      arbitrumOne: process.env.ARBISCAN_API_KEY || "",
     },
   },
   
-  // Gas reporter configuration
   gasReporter: {
     enabled: process.env.REPORT_GAS === "true",
     currency: "USD",
     coinmarketcap: process.env.COINMARKETCAP_API_KEY || "",
     outputFile: "gas-report.txt",
     noColors: true,
+    showTimeSpent: true,
+    showMethodSig: true,
+    token: "ETH",
+    gasPriceApi: "https://api.etherscan.io/api?module=proxy&action=eth_gasPrice",
+    excludeContracts: ["test/"],
   },
   
-  // Paths configuration
+  contractSizer: {
+    alphaSort: true,
+    disambiguatePaths: false,
+    runOnCompile: true,
+    strict: true,
+    only: [],
+  },
+  
   paths: {
     sources: "./contracts",
     tests: "./test",
@@ -65,8 +96,29 @@ module.exports = {
     artifacts: "./artifacts",
   },
   
-  // Mocha test configuration
   mocha: {
-    timeout: 40000,
+    timeout: 200000,
+    parallel: false, // Set to true for faster testing, but may cause issues with state
+    reporter: "spec",
+    reporterOptions: {
+      output: "test-results.txt",
+    },
+  },
+  
+  // Solidity coverage configuration
+  coverage: {
+    skipFiles: [
+      "test/",
+      "mocks/",
+    ],
+    measureStatementCoverage: true,
+    measureFunctionCoverage: true,
+    measureBranchCoverage: true,
+    measureLineCoverage: true,
+  },
+  
+  typechain: {
+    outDir: "typechain-types",
+    target: "ethers-v6",
   },
 };
