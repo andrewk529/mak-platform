@@ -1,46 +1,76 @@
 {
-  "name": "mak-realty-platform",
+  "name": "mak-platform",
   "version": "1.0.0",
-  "description": "MAK Realty - Next-generation real estate platform with blockchain integration",
-  "main": "src/index.js",
+  "description": "Blockchain + AI Real Estate Platform",
+  "main": "index.js",
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
-    "lucide-react": "^0.263.1"
+    "test": "hardhat test",
+    "test:unit": "hardhat test test/unit/**/*.test.js",
+    "test:integration": "hardhat test test/integration/**/*.test.js",
+    "test:security": "hardhat test test/security/**/*.test.js",
+    "test:watch": "hardhat watch test",
+    "coverage": "hardhat coverage",
+    "coverage:report": "hardhat coverage && open coverage/index.html",
+    "compile": "hardhat compile",
+    "clean": "hardhat clean",
+    "deploy:local": "hardhat run scripts/deploy.js",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
+    "verify:sepolia": "hardhat verify --network sepolia",
+    "lint": "npm run lint:sol && npm run lint:js",
+    "lint:sol": "solhint 'contracts/**/*.sol'",
+    "lint:js": "eslint .",
+    "lint:fix": "solhint 'contracts/**/*.sol' --fix && eslint . --fix",
+    "format": "prettier --write 'contracts/**/*.sol' 'test/**/*.js' 'scripts/**/*.js'",
+    "security": "npm run security:slither && npm run security:mythril",
+    "security:slither": "slither .",
+    "security:mythril": "myth analyze contracts/*.sol",
+    "size": "hardhat size-contracts",
+    "node": "hardhat node",
+    "flatten": "hardhat flatten"
   },
   "keywords": [
-    "mak-realty",
-    "real-estate",
     "blockchain",
-    "mortgage",
-    "insurance",
-    "crypto",
-    "ai"
+    "real-estate",
+    "fractional-ownership",
+    "ethereum",
+    "smart-contracts",
+    "defi",
+    "proptech"
   ],
-  "author": "Michael Kelczewski - MAK Realty",
-  "license": "PROPRIETARY",
-  "homepage": "https://github.com/[your-username]/mak-realty-platform",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/[your-username]/mak-realty-platform.git"
+  "author": "MAK Platform Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.0",
+    "@openzeppelin/hardhat-upgrades": "^3.0.0",
+    "@typechain/ethers-v6": "^0.5.0",
+    "@typechain/hardhat": "^9.0.0",
+    "chai": "^4.3.10",
+    "eslint": "^8.50.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "ethers": "^6.9.0",
+    "hardhat": "^2.19.0",
+    "hardhat-contract-sizer": "^2.10.0",
+    "hardhat-gas-reporter": "^1.0.9",
+    "prettier": "^3.0.3",
+    "prettier-plugin-solidity": "^1.1.3",
+    "solhint": "^4.0.0",
+    "solidity-coverage": "^0.8.5",
+    "typechain": "^8.3.0"
   },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+  "dependencies": {
+    "@chainlink/contracts": "^0.8.0",
+    "@openzeppelin/contracts": "^5.0.0",
+    "@openzeppelin/contracts-upgradeable": "^5.0.0",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   }
 }
